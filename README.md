@@ -1,12 +1,12 @@
 # 🛒 Stockout-Aware Product Demand Forecasting using FreshRetailNet‑50K
 
-This project aims to forecast hourly product demand in retail stores while accounting for real-world complexities such as stockouts, promotions, holidays, and weather effects. It uses the [FreshRetailNet-50K](https://huggingface.co/datasets/Dingdong-Inc/FreshRetailNet-50K) dataset — a large-scale, real-world perishable goods sales dataset from 898 stores across 18 cities.
+This project aims to forecast product demand in retail stores while accounting for real-world complexities such as stockouts, promotions, holidays, and weather effects. It uses the [FreshRetailNet-50K](https://huggingface.co/datasets/Dingdong-Inc/FreshRetailNet-50K) dataset — a large-scale, real-world perishable goods sales dataset from 898 stores across 18 cities.
 
 ---
 
 ## 🌟 Problem Statement
 
-> **How can we accurately forecast hourly product demand in retail stores while accounting for stockouts, promotions, and contextual factors like weather and holidays?**
+> **How can we accurately forecast product demand in retail stores while accounting for stockouts, promotions, and contextual factors like weather and holidays?**
 
 This project focuses on building a forecasting system that:
 
@@ -121,6 +121,7 @@ This project draws inspiration from how retail giants like Walmart, Target, and 
 ## 🧩 Next Steps
 
 * [x] **Latent Demand Recovery**: Estimate true demand during stockouts
+* [x] **Daily Aggregation**: Switched from hourly to daily granularity to reduce data sparsity, improve model training stability, and accommodate memory constraints during preprocessing.
 * [ ] **Train forecasting models** (LightGBM, LSTM, TFT)
 * [ ] **Evaluate performance on multiple time horizons**
 * [ ] **Integrate store-level and category-level predictions**
@@ -132,13 +133,17 @@ This project draws inspiration from how retail giants like Walmart, Target, and 
 
 ```
 .
+.
 ├── notebooks/
 │   ├── eda.ipynb
 │   ├── category_store_analysis.ipynb
 │   ├── latent_demand_forecasting.ipynb
-│   └── product_level_demand_imputation.ipynb
+│   ├── product_level_demand_imputation.ipynb
+│   └── 05_daily_baseline_modeling.ipynb   ← 🆕 NEW
 ├── data/
-│   └── freshretailnet_full.csv / other loaded datasets
+│   ├── daily_dataset
+│   ├── freshretail_flattened_chunks/   # Full hourly data split into parquet chunks
+│   ├── flattened_chunks/   
 ├── docs/
 │   ├── hourly_sales.png
 │   ├── stockout_rate.png
@@ -157,6 +162,16 @@ pip install -r requirements.txt
 
 ---
 
+
+## ⚠️ Modeling Decisions
+
+* Initially attempted modeling at hourly level (24 values/day) but encountered instability due to memory issues and extreme sparsity during late hours.
+* Switched to **daily aggregation** to simplify the pipeline and ensure better generalization across categories and stores.
+* Flagged full-day stockout days and anomalous sales during stockouts instead of dropping them — preserving integrity of training samples.
+* Initially tested aggregation over **6 AM to 10 PM**, but reverted to **full-day (24 hours)** to maintain consistency and reduce leakage from selective hour exclusions.
+
+_📝 Note: These trade-offs are logged for future benchmarking and ablation studies._
+
 ## 🙌 Credits
 
 * Dataset by [Dingdong-Inc](https://huggingface.co/datasets/Dingdong-Inc/FreshRetailNet-50K)
@@ -165,7 +180,7 @@ pip install -r requirements.txt
 
 ## Notebooks Overview
 
-🔹 eda.ipynb
+🔹 01_eda.ipynb
 
 Objective: Perform foundational exploratory data analysis on the full FreshRetailNet dataset.
 Key Steps:
@@ -173,7 +188,7 @@ Key Steps:
 - Plotted category and store distributions to assess modeling feasibility.
 - Helped guide whether to model per-product/store or via aggregation.
 
-🔹 category_store_analysis.ipynb
+🔹 02_category_store_analysis.ipynb
 
 Objective: Analyze demand distribution across categories and stores to design scalable modeling groups.
 Key Steps:
@@ -181,7 +196,7 @@ Key Steps:
 - Found 87 unique categories cover 83.1% of demand.
 - Mapped each of these top categories to associated store IDs for selective model training.
 
-🔹 latent_demand_forecasting.ipynb
+🔹 03_latent_demand_forecasting.ipynb
 
 Objective: Set up demand forecasting pipelines focused on the 87 high-impact third-level categories.
 Key Steps:
@@ -189,7 +204,7 @@ Key Steps:
 - Calculated total demand coverage.
 - Prepared modeling granularity plan to balance performance with scalability.
 
-🔹 product_level_demand_imputation.ipynb
+🔹 04_product_level_demand_imputation.ipynb
 
 Objective: Impute missing or latent demand signals at the product level prior to forecasting.
 Key Steps:
@@ -197,3 +212,11 @@ Key Steps:
 - Merged and aligned imputed values with the master dataset.
 - Enabled cleaner downstream modeling by reducing signal sparsity.
   
+🔹 05_daily_baseline_modeling.ipynb
+
+Objective: Aggregate hourly sales data into daily format and prepare a baseline dataset for modeling.
+Key Steps:
+- Aggregated hourly features (sales, stockouts, weather, promotions) to daily granularity.
+- Flagged full-day stockout periods (`oos_hours_24 == 24`) and suspicious sales during those periods.
+- Switched from 6–22 hour filtering to full 24-hour retention due to inconsistencies in industrial reporting.
+- Finalized `daily_df` for top third-level categories covering 90–95% of total sales volume.
