@@ -193,3 +193,5 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 .DS_Store
+
+notebooks/data/fresh_retail_net_daily.csv
