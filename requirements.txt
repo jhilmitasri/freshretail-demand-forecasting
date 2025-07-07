@@ -70,3 +70,4 @@ wcwidth==0.2.13
 xgboost==3.0.2
 xxhash==3.5.0
 yarl==1.20.1
+darts

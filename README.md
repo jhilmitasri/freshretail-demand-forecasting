@@ -122,10 +122,14 @@ This project draws inspiration from how retail giants like Walmart, Target, and 
 
 * [x] **Latent Demand Recovery**: Estimate true demand during stockouts
 * [x] **Daily Aggregation**: Switched from hourly to daily granularity to reduce data sparsity, improve model training stability, and accommodate memory constraints during preprocessing.
-* [ ] **Train forecasting models** (LightGBM, LSTM, TFT)
-* [ ] **Evaluate performance on multiple time horizons**
-* [ ] **Integrate store-level and category-level predictions**
-* [ ] **Visualize final model predictions across store-product groups**
+* [x] **Train forecasting models** (LightGBM, LSTM, TFT)
+* [x] **Baseline feature engineering & data processing** for selected third_category_ids (covering ~90 % of demand)  
+* [x] **Begin model training**: LightGBM per category on daily‐aggregated & imputed data  
+* [x] **Evaluate baseline performance** (RMSE/MAE) & feature importances  
+* [x] **Explore recursive vs. direct forecasting strategies**
+* [x] **Prototype sequence models (TFT, N-BEATS, etc.)**
+* [ ] Containerize pipeline & deploy inference API (FastAPI + Kubernetes)  
+* [ ] Set up monitoring for data-drift and model health  
 
 ---
 
@@ -135,11 +139,20 @@ This project draws inspiration from how retail giants like Walmart, Target, and 
 .
 .
 ├── notebooks/
-│   ├── eda.ipynb
-│   ├── category_store_analysis.ipynb
-│   ├── latent_demand_forecasting.ipynb
-│   ├── product_level_demand_imputation.ipynb
-│   └── 05_daily_baseline_modeling.ipynb   ← 🆕 NEW
+│   ├── 01_eda.ipynb
+│   ├── 02_category_store_analysis.ipynb
+│   ├── 03_latent_demand_forecasting.ipynb
+│   ├── 04_product_level_demand_imputation.ipynb
+│   ├── 05_daily_baseline_modeling.ipynb
+│   ├── 06_model_training_analysis.ipynb
+│   ├── 07_imputation_and_aggregation.ipynb
+│   ├── 08_feature_engineering.ipynb
+│   ├── 08_model_recursive.ipynb
+│   ├── 09_direct_sliding_window.ipynb
+│   ├── 10_sequence_modeling.ipynb
+│   ├── 11_Sequence_Modelling_GPU.ipynb
+│   ├── 12-darts-n-beats.ipynb
+│   └── 14-darts-n-beats.ipynb   ← 🆕 NEW
 ├── data/
 │   ├── daily_dataset
 │   ├── freshretail_flattened_chunks/   # Full hourly data split into parquet chunks
