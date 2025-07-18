@@ -113,6 +113,9 @@ ipython_config.py
 #   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
 #   in version control.
 #   https://pdm.fming.dev/latest/usage/project/#working-with-version-control
+
+data/
+
 .pdm.toml
 .pdm-python
 .pdm-build/

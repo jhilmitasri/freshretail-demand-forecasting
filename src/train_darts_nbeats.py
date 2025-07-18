@@ -1,86 +1,202 @@
-# train_darts_nbeats.py
-"""
-Train and evaluate Darts N-BEATS on top third-level categories.
-"""
-import argparse
+# Suppress pkg_resources deprecation warning
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message="pkg_resources is deprecated as an API.*",
+    category=UserWarning
+)
+
+# Suppress MPS pin_memory warning
+import torch
+warnings.filterwarnings(
+    "ignore",
+    message="'pin_memory' argument is set as true but not supported on MPS now.*",
+    category=UserWarning
+)
+
 import os
+import argparse
 import pandas as pd
-import matplotlib.pyplot as plt
+import numpy as np
 from darts import TimeSeries
-from darts.metrics import mae
-from darts.models import NBEATSModel
+from darts.models.forecasting.nbeats import NBEATSModel
+from sklearn.metrics import mean_absolute_error
+import torch
+from darts.models.forecasting.nbeats import NBEATSModel
 
-def main(args):
-    df = pd.read_parquet(args.input_path)
-    df["dt"] = pd.to_datetime(df["dt"])
-    # pick categories
-    if args.categories:
-        cats = args.categories
-    else:
-        # fallback: top-n by total sales
-        sales = df.groupby("third_category_id")["daily_sale_imputed"].sum()
-        cats = sales.nlargest(args.top_n).index.tolist()
-    os.makedirs(args.output_dir, exist_ok=True)
-    summary = []
+def save_nbeats_model(model, path):
+    """
+    Saves only the state_dict of model.model to the given path.
+    Creates parent directories if needed.
+    """
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    # pull out the raw Lightning module inside Darts
+    lightning_module = model.model  
 
+    # save only its weights
+    torch.save(lightning_module.state_dict(), path)
+    model.save(path, clean=True)
+
+def load_nbeats_model(
+    path: str,
+    input_chunk_length: int,
+    output_chunk_length: int,
+    random_state: int,
+    pl_trainer_kwargs: dict
+) -> NBEATSModel:
+    """
+    Instantiates a fresh NBEATSModel and loads the saved state_dict.
+    Returns the ready-to-use model.
+    """
+   # Re-create the same wrapper
+    model = NBEATSModel(
+        input_chunk_length=input_chunk_length,
+        output_chunk_length=output_chunk_length,
+        random_state=random_state,
+        pl_trainer_kwargs=pl_trainer_kwargs
+    )
+    # Load *only* weights (and encoders)
+    weights_path = path
+    model.load_weights(
+        weights_path,
+        load_encoders=False,
+        skip_checks=True,
+        map_location="cpu"
+    )
+    return model
+
+
+def train_for_category(
+    df: pd.DataFrame,
+    cat_id: int,
+    input_len: int,
+    output_len: int,
+    model_dir: str
+):
+    # 1) build a daily series for this category
+    df_cat = (
+        df[df["third_category_id"] == cat_id]
+        .groupby("dt", as_index=False)["daily_sale_imputed"]
+        .sum()
+        .sort_values("dt")
+    )
+    ts = TimeSeries.from_dataframe(
+        df_cat, time_col="dt", value_cols="daily_sale_imputed", freq="D"
+    )
+    # cast series to float32 to match trainer precision
+    ts = ts.astype(np.float32)
+
+    # 2) hold out exactly the last `output_len` days
+    train, val = ts[:-output_len], ts[-output_len:]
+
+    # 3) instantiate & fit
+    # configure PyTorch Lightning trainer parameters
+    pl_kwargs = {"precision": 32}
+    if torch.backends.mps.is_available():
+        pl_kwargs.update({"accelerator": "mps", "devices": 1})
+
+    model = NBEATSModel(
+        input_chunk_length=input_len,
+        output_chunk_length=output_len,
+        random_state=42,
+        pl_trainer_kwargs=pl_kwargs
+    )
+    model.fit(train, verbose=False)
+    # save weights via helper
+    weights_path = os.path.join(model_dir, f"nbeats_cat_{cat_id}.pt")
+    save_nbeats_model(model, weights_path)
+
+    # 4) predict + eval
+    preds = model.predict(n=output_len)
+    true = val.values()[:, 0]
+    pred = preds.values()[:, 0]
+    mae  = mean_absolute_error(true, pred)
+    print(f"✔️  Cat {cat_id}: MAE={mae:.2f}")
+
+    # # 5) save weights only (state_dict)
+    # os.makedirs(model_dir, exist_ok=True)
+    # state_path = os.path.join(model_dir, f"nbeats_cat_{cat_id}.pth")
+    # torch.save(model.model.state_dict(), state_path)
+
+    return mae
+
+
+def predict_for_category(
+    category: int,
+    modelready_path: str,
+    model_dir: str,
+    input_len: int = 28,
+    output_len: int = 7
+) -> pd.DataFrame:
+    import os
+    import pandas as pd
+    import numpy as np
+    from darts import TimeSeries
+
+    # 1) load features
+    if not os.path.isfile(modelready_path):
+        raise FileNotFoundError(f"No feature-ready parquet at {modelready_path}")
+    df = pd.read_parquet(modelready_path)
+
+    # 2) filter & aggregate daily
+    df_cat = (
+        df[df["third_category_id"] == category]
+        .groupby("dt", as_index=False)["daily_sale_imputed"]
+        .sum()
+        .sort_values("dt")
+    )
+    if df_cat.empty:
+        raise ValueError(f"No data for category {category}")
+
+    # 3) build series
+    ts = TimeSeries.from_dataframe(df_cat, time_col="dt", value_cols="daily_sale_imputed", freq="D")
+    ts = ts.astype(np.float32)
+    print("Training time series:", ts)
+    # load model via helper
+    pl_kwargs = {"precision": 32}
+    if torch.backends.mps.is_available():
+        pl_kwargs.update({"accelerator": "mps", "devices": 1})
+    weights_path = os.path.join(model_dir, f"nbeats_cat_{category}.pt")
+    if not os.path.isfile(weights_path):
+        raise FileNotFoundError(f"No weights file at {weights_path}")
+    model = load_nbeats_model(
+        weights_path,
+        input_chunk_length=input_len,
+        output_chunk_length=output_len,
+        random_state=42,
+        pl_trainer_kwargs=pl_kwargs
+    )
+
+    # 5) sliding-window backtest via historical_forecasts
+    backtest_series = model.historical_forecasts(
+        series=ts,
+        forecast_horizon=output_len,
+        stride=output_len,
+        retrain=False,
+        last_points_only=False,
+        verbose=True
+    )
+    # concatenate all forecast segments into one TimeSeries
+    pred_ts = backtest_series[0]
+    for segment in backtest_series[1:]:
+        pred_ts = pred_ts.append(segment)
+
+    # 6) to DataFrame
+    df_pred = pred_ts.pd_dataframe().reset_index()
+    df_pred.columns = ["dt", "prediction"]
+    df_pred["third_category_id"] = category
+    return df_pred
+
+
+def main(
+    cats: list[int],
+    modelready_path: str,
+    model_dir: str,
+    input_len: int = 28,
+    output_len: int = 7
+):
+    df = pd.read_parquet(modelready_path)
+    print(f"ℹ️  Loaded model-ready data: {df.shape[0]} rows")
     for cat in cats:
-        df_cat = df[df["third_category_id"] == cat]
-        agg = (
-            df_cat.groupby("dt", as_index=False)["daily_sale_imputed"]
-                  .sum()
-        )
-        series = TimeSeries.from_dataframe(
-            agg, time_col="dt", value_cols="daily_sale_imputed",
-            fill_missing_dates=True, freq="D"
-        )
-        train, val = series.split_after(0.8)
-
-        model = NBEATSModel(
-            input_chunk_length=args.input_chunk_length,
-            output_chunk_length=args.output_chunk_length,
-            n_epochs=args.n_epochs,
-            dropout=args.dropout,
-            batch_size=args.batch_size,
-            random_state=42,
-            force_reset=True
-        )
-        model.fit(train, verbose=False)
-        pred = model.predict(len(val), series=train)
-        error = mae(val, pred)
-        print(f"Cat {cat} → MAE: {error:.2f}")
-
-        # plot & save
-        plt.figure(figsize=(10,4))
-        val.plot(label="actual")
-        pred.plot(label="forecast")
-        plt.title(f"Category {cat} Forecast")
-        plt.legend()
-        plt.tight_layout()
-        plt.savefig(f"{args.output_dir}/cat_{cat}_forecast.png")
-        plt.close()
-
-        # save model
-        model.save(f"{args.output_dir}/model_cat_{cat}.pth.tar")
-
-        summary.append({"category": cat, "mae": error})
-
-    pd.DataFrame(summary).to_csv(f"{args.output_dir}/mae_summary.csv", index=False)
-    print("✅ All done — summary saved to mae_summary.csv")
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input-path",       type=str,
-                        default="data/daily_dataset/daily_df_modelready.parquet")
-    parser.add_argument("--output-dir",       type=str,
-                        default="models/nbeats")
-    parser.add_argument("--categories",       type=int, nargs="*",
-                        help="Specific third_category_ids to train on")
-    parser.add_argument("--top-n",            type=int, default=3,
-                        help="Pick top-n categories by sales if --categories unset")
-    parser.add_argument("--input-chunk-length", type=int, default=28)
-    parser.add_argument("--output-chunk-length", type=int, default=7)
-    parser.add_argument("--n-epochs",         type=int, default=50)
-    parser.add_argument("--dropout",          type=float, default=0.1)
-    parser.add_argument("--batch-size",       type=int, default=32)
-    args = parser.parse_args()
-    main(args)
+        train_for_category(df, cat, input_len=input_len, output_len=output_len, model_dir=model_dir)
+    print("✅ All categories trained.")
