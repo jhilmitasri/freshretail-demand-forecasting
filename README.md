@@ -109,12 +109,14 @@ This project draws inspiration from how retail giants like Walmart, Target, and 
 <p float="left">
   <img src="docs/hourly_sales.png" width="400"/>
     <img src="docs/stockout_rate.png" width="400"/>
+    <img src="docs/weekday_sales.png" width="400"/>
   
 </p>
-<p float="left">
-    <img src="docs/weekday_sales.png" width="400"/>
+<!-- <p float="left"> -->
+    <!-- <img src="docs/weekday_sales.png" width="400"/> -->
   <!-- <img src="docs/discount_impact.png" width="400"/> -->
-</p>
+<!-- </p> -->
+
 
 ---
 
@@ -128,7 +130,7 @@ This project draws inspiration from how retail giants like Walmart, Target, and 
 * [x] **Evaluate baseline performance** (RMSE/MAE) & feature importances  
 * [x] **Explore recursive vs. direct forecasting strategies**
 * [x] **Prototype sequence models (TFT, N-BEATS, etc.)**
-* [ ] Containerize pipeline & deploy inference API (FastAPI + Kubernetes)  
+* [ ] Containerize pipeline & deploy inference API
 * [ ] Set up monitoring for data-drift and model health  
 
 ---
@@ -140,6 +142,7 @@ This project draws inspiration from how retail giants like Walmart, Target, and 
 .
 ├── notebooks/
 │   ├── 01_eda.ipynb
+│   ├── 01_eda_eval.ipynb
 │   ├── 02_category_store_analysis.ipynb
 │   ├── 03_latent_demand_forecasting.ipynb
 │   ├── 04_product_level_demand_imputation.ipynb
@@ -152,18 +155,51 @@ This project draws inspiration from how retail giants like Walmart, Target, and 
 │   ├── 10_sequence_modeling.ipynb
 │   ├── 11_Sequence_Modelling_GPU.ipynb
 │   ├── 12-darts-n-beats.ipynb
-│   └── 14-darts-n-beats.ipynb   ← 🆕 NEW
+│   └── 14-darts-n-beats.ipynb
 ├── data/
 │   ├── daily_dataset
 │   ├── freshretail_flattened_chunks/   # Full hourly data split into parquet chunks
 │   ├── flattened_chunks/   
+├── src/
+│   ├── ingest_flatten.py
+│   ├── aggregate_impute.py
+│   ├── featurize.py
+│   ├── train_darts_nbeats.py
+│   ├── train_pipeline.py
+│   ├── prediction_pipeline.py
+│   └── backup_prediction_pipeline.py
+├── models/
+│   ├── nbeats_cat_1.pt
+│   ├── nbeats_cat_60.pt
+│   ├── nbeats_cat_81.pt
+│   ├── nbeats_cat_82.pt
+│   └── nbeats_cat_184.pt
 ├── docs/
 │   ├── hourly_sales.png
 │   ├── stockout_rate.png
 │   └── weekday_sales.png
+│   └── PredictionPlot_Eval.png
 ├── README.md
 └── requirements.txt
 ```
+
+---
+
+## 🔧 src/ Scripts Overview
+
+Here is what each script in the `src/` folder does:
+
+- **ingest_flatten.py**: Streams FreshRetailNet hourly data, flattens it into parquet chunks.
+- **aggregate_impute.py**: Aggregates the flattened hourly chunks to daily frequency and imputes missing sales and out-of-stock flags.
+- **featurize.py**: Builds model-ready feature tables (lags, rolling stats, calendar encodings) for each category.
+- **train_darts_nbeats.py**: Contains the logic to train a separate N‑BEATS model per category and save cleaned checkpoints.
+- **train_pipeline.py**: Orchestrates the full training pipeline: ingest → aggregate/impute → featurize → train.
+- **prediction_pipeline.py**: Prepares eval features if needed, loads trained N‑BEATS models, forecasts from the last 28 days, and plots actual vs. predicted values.
+
+<p float="centre">
+  <img src="docs/PredictionPlot_Eval.png" width="800"/>
+</p>
+
 
 ---
 
@@ -172,6 +208,38 @@ This project draws inspiration from how retail giants like Walmart, Target, and 
 ```bash
 pip install -r requirements.txt
 ```
+## 🚀 Implementation
+
+**Training**:
+
+```bash
+python src/train_pipeline.py \
+  --split train \
+  --batch-size 12000 \
+  --flat-dir data/flattened_chunks \
+  --daily-path data/daily_dataset/daily_df_imputed.parquet \
+  --modelready-path data/daily_dataset/daily_df_modelready.parquet \
+  --cats 81 60 82 184 1 \
+  --model-dir models \
+  --input-len 28 \
+  --output-len 7
+```
+
+**Prediction**:
+
+```bash
+python src/prediction_pipeline.py \
+  --train-modelready-path data/daily_dataset/daily_df_modelready.parquet \
+  --flat-dir data/flattened_chunks_eval \                
+  --daily-path data/daily_dataset/daily_df_eval.parquet \             
+  --modelready-path data/daily_dataset/daily_df_eval_modelready.parquet \
+  --cats 81 60 82 184 1 \
+  --model-dir models \
+  --input-len 28 \
+  --output-len 7
+```
+
+Just paste that snippet into your README.md immediately after the Dependencies section. Let me know if you’d like any tweaks!
 
 ---
 
