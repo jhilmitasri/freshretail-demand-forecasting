@@ -120,6 +120,9 @@ def main():
             input_chunk_length=args.input_len,
             output_chunk_length=args.output_len,
             random_state=42,
+            n_epochs=50,               # number of training epochs
+            dropout=0.1,               # dropout in each layer
+            batch_size=8,             # minibatch size
             pl_trainer_kwargs={}   # or whatever device settings you need
         )
 
@@ -163,7 +166,7 @@ def main():
         ax.set_visible(False)
 
     # fig.tight_layout()
-    plt.show()
+    plt.savefig("src/models/category_forecasts.png", bbox_inches="tight", dpi=150)
 
 if __name__ == "__main__":
     main()

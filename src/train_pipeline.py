@@ -1,7 +1,7 @@
 # train_pipeline.py
 
 #!/usr/bin/env python
-
+import os
 import argparse
 from ingest_flatten import stream_and_flatten
 from aggregate_impute import aggregate_and_impute
@@ -57,6 +57,7 @@ def main():
 
     # 1️⃣ Ingest & flatten hourly → parquet chunks
     print("\n▶️  Step 1: stream & flatten")
+    os.makedirs(args.flat_dir, exist_ok=True)
     stream_and_flatten(
         split=args.split,
         batch_size=args.batch_size,

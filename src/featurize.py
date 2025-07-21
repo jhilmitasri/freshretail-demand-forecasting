@@ -47,11 +47,11 @@ def main():
         description="Build time-series features on daily imputed dataset."
     )
     parser.add_argument(
-        "--input-path", default="data/daily_dataset/daily_df_imputed.parquet",
+        "--input-path", default="src/data/daily_dataset/daily_df_imputed.parquet",
         help="Path to the aggregated+imputed daily Parquet."
     )
     parser.add_argument(
-        "--output-path", default="data/daily_dataset/daily_df_modelready.parquet",
+        "--output-path", default="src/data/daily_dataset/daily_df_modelready.parquet",
         help="Path for the model-ready Parquet."
     )
     args = parser.parse_args()
