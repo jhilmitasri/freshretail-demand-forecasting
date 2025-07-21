@@ -1,0 +1,27 @@
+docker run --rm -it \
+  -v "$PWD:/app" \
+  freshretail-forecast:latest \
+  python src/train_pipeline.py \
+    --split train \
+    --batch-size 100000 \
+    --flat-dir src/data/flattened_chunks \
+    --daily-path src/data/daily_dataset/daily_df_imputed.parquet \
+    --modelready-path src/data/daily_dataset/daily_df_modelready.parquet \
+    --cats 81 60 82 184 1 \
+    --model-dir src/models \
+    --input-len 28 \
+    --output-len 7
+
+
+docker run --rm -it \
+  -v "$PWD:/app" \
+  freshretail-forecast:latest \
+  python src/prediction_pipeline.py \
+    --train-modelready-path   src/data/daily_dataset/daily_df_modelready.parquet \
+    --flat-dir                src/data/flattened_chunks_eval \
+    --daily-path              src/data/daily_dataset/daily_df_eval.parquet \
+    --modelready-path         src/data/daily_dataset/daily_df_eval_modelready.parquet \
+    --cats                    81 60 82 184 1 \
+    --model-dir               src/models \
+    --input-len               28 \
+    --output-len              7

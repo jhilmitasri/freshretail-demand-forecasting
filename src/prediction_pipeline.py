@@ -166,7 +166,7 @@ def main():
         ax.set_visible(False)
 
     # fig.tight_layout()
-    plt.show()
+    plt.savefig("src/models/category_forecasts.png", bbox_inches="tight", dpi=150)
 
 if __name__ == "__main__":
     main()
