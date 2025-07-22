@@ -32,7 +32,7 @@ jobs:
           password: ${{ secrets.GHCR_PAT }}
 
       - name: Build & push with Compose
-        uses: docker/compose-action@v2
+        uses: docker/compose-action@v3.2.0
         with:
           files: docker-compose.yml
           push: true
