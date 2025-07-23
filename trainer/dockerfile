@@ -1,0 +1,37 @@
+############################################################
+# Dockerfile for FreshRetail Demand Forecasting - Trainer
+############################################################
+
+# Base image with Python 3.12
+FROM python:3.12-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies (required by LightGBM/Darts)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libgomp1 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install them
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the full source code (you can optimize this later)
+COPY src/ ./src/
+
+# 🔁 (Optional) Copy config/data/model folders if needed:
+# COPY src/data/ ./src/data/
+# COPY src/models/ ./src/models/
+
+# Set default CMD to run training when deployed on Render
+CMD ["python", "src/train_pipeline.py", \
+     "--split", "train", \
+     "--batch-size", "100000", \
+     "--flat-dir", "delta/flattened_chunks", \
+     "--daily-path", "delta/daily_df_imputed", \
+     "--modelready-path", "delta/daily_df_modelready", \
+     "--cats", "81", "60", "82", "184", "1", \
+     "--model-dir", "src/models", \
+     "--input-len", "28", \
+     "--output-len", "7"]
