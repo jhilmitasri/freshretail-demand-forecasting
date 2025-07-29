@@ -30,11 +30,11 @@ def save_nbeats_model(model, path):
     Creates parent directories if needed.
     """
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    # # pull out the raw Lightning module inside Darts
-    # lightning_module = model.model  
+    # pull out the raw Lightning module inside Darts
+    lightning_module = model.model  
 
-    # # save only its weights
-    # torch.save(lightning_module.state_dict(), path)
+    # save only its weights
+    torch.save(lightning_module.state_dict(), path)
     model.save(path, clean=True)
 
 def load_nbeats_model(
@@ -94,13 +94,6 @@ def train_for_category(
     pl_kwargs = {"precision": 32}
     if torch.backends.mps.is_available():
         pl_kwargs.update({"accelerator": "mps", "devices": 1})
-
-    # model = NBEATSModel(
-    #     input_chunk_length=input_len,
-    #     output_chunk_length=output_len,
-    #     random_state=42,
-    #     pl_trainer_kwargs=pl_kwargs
-    # )
 
     model = NBEATSModel(
         input_chunk_length=input_len,

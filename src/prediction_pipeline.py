@@ -117,8 +117,8 @@ def main():
             raise FileNotFoundError(f"Model file not found: {model_path}")
         # re‐instantiate the model shell with identical architecture & pl kwargs
         model = NBEATSModel(
-            input_chunk_length=28,
-            output_chunk_length=7,
+            input_chunk_length=args.input_len,
+            output_chunk_length=args.output_len,
             random_state=42,
             n_epochs=50,               # number of training epochs
             dropout=0.1,               # dropout in each layer
@@ -135,26 +135,13 @@ def main():
         )
 
         # set to eval mode
-        model.model.eval()
+        # model.eval()
 
         ts_tr = ts_tr.astype(np.float32)
         ts_ev = ts_ev.astype(np.float32)
 
-        # 1) get the required past_covariates
-        past_covs, _ = model.generate_predict_encodings(
-            n      = args.output_len,   # 7
-            series = history            # your last-28-days target
-        )
-
-        # 2) predict *with* those covariates
-        pred_ts = model.predict(
-            n               = args.output_len,
-            series          = history,
-            past_covariates = past_covs
-        )
-
         # 5d) forecast next output_len days
-        # pred_ts = model.predict(n=args.output_len, series=history)
+        pred_ts = model.predict(n=args.output_len, series=history)
 
         # 5e) merge predictions with actual eval
         df_pred = pred_ts.to_dataframe().reset_index().rename(
